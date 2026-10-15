@@ -1,0 +1,69 @@
+name: Repository checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, development]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scaffold:
+    name: Scaffold and pinned runtimes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Verify pinned runtime versions
+        shell: bash
+        run: |
+          python -c 'import pathlib, sys; expected = pathlib.Path(".python-version").read_text().strip(); actual = ".".join(map(str, sys.version_info[:3])); print(f"Python {actual} (expected {expected})"); assert actual == expected'
+          node -e 'const expected = require("fs").readFileSync(".nvmrc", "utf8").trim(); const actual = process.versions.node; console.log(`Node.js ${actual} (expected ${expected})`); if (actual !== expected) process.exit(1)'
+
+      - name: Check repository scaffold and secret-file policy
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          required = [
+              "README.md",
+              ".env.example",
+              "compose.yaml",
+              "backend",
+              "frontend",
+              "testdata/demo",
+              "docs/adr",
+              "tests/e2e",
+          ]
+          missing = [path for path in required if not Path(path).exists()]
+          if missing:
+              raise SystemExit(f"Missing scaffold paths: {', '.join(missing)}")
+          PY
+          git check-ignore --quiet .env
+          if git ls-files --error-unmatch -- .env >/dev/null 2>&1; then
+            echo "A local .env must never be tracked"
+            exit 1
+          fi
+
+      - name: Validate isolated Compose configuration
+        env:
+          POSTGRES_DB: cashback_ci
+          POSTGRES_USER: cashback_ci
+          POSTGRES_PASSWORD: ci-only-placeholder-password
+          DATABASE_URL: postgresql+asyncpg://cashback_ci:ci-only-placeholder-password@db:5432/cashback_ci
+        run: docker compose config --quiet

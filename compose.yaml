@@ -1,0 +1,30 @@
+name: cashback-offers-local
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cashback_demo}
+      POSTGRES_USER: ${POSTGRES_USER:-cashback_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate a local .env with scripts/setup-local-env.ps1}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - cashback-offers-local-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - cashback-offers-local
+
+volumes:
+  cashback-offers-local-pgdata:
+    name: cashback-offers-local-pgdata
+
+networks:
+  cashback-offers-local:
+    name: cashback-offers-local-network
+    driver: bridge
